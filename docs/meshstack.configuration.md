@@ -187,7 +187,7 @@ let AzureCreds =
       , guestLookup : Optional AzureGuestDetection
       , euidSchemaExtensionUpdate : Optional AzureEuidExtensionSchema
       , euidUserAttributeUpdate : Optional AzureEuidUserAttribute
-      , usernamePropertyUpdate : Optional AzureUsernameAttributeUpdate
+      , usernameAttributeUpdate : Optional AzureUsernameAttributeUpdate
       }
 ```
 <!--Example-->
@@ -202,7 +202,7 @@ let example
       , guestLookup = None AzureGuestDetection
       , euidSchemaExtensionUpdate = None AzureEuidExtensionSchema
       , euidUserAttributeUpdate = None AzureEuidUserAttribute
-      , usernamePropertyUpdate = None AzureUsernameAttributeUpdate
+      , usernameAttributeUpdate = None AzureUsernameAttributeUpdate
       }
 ```
 <!--END_DOCUSAURUS_CODE_TABS-->

@@ -128,6 +128,20 @@ This `MeshfedServiceRole` should be created in the management account with the f
                 "organizations:CreateAccount"
             ],
             "Resource": "*"
+        },
+        {
+            "Sid": "OrgManagementAccessSSO",
+            "Effect": "Allow",
+            "Action": [
+                "sso:ListAccountAssignments",
+                "sso:CreateAccountAssignment",
+                "sso:DescribeAccountAssignmentCreationStatus"
+            ],
+            "Resource": [
+              "<<AWS_SSO_INSTANCE_ARN>>",
+              "arn:aws:sso:::permissionSet/*/*",
+              "arn:aws:sso:::account/*"
+            ]
         }
     ]
 }
@@ -243,29 +257,188 @@ In order to roll out CloudFormation Stack Instances in the newly provisioned acc
 ```
 <!--END_DOCUSAURUS_CODE_TABS-->
 
-### AWS Role Mapping
+### IAM Configuration
 
-The [project roles](meshcloud.project.md#project-roles) are mapped to user roles in AWS. This mapping is fully customizable. It is also possible to attach a AWS policy automatically to the user role in AWS.
+Currently meshStack supports 2 different ways of integrating AWS IAM with meshStack. The AWS SSO integration is the preferred integration as it
+allows using your companies central IdP to log in to AWS. This simplifies integration with meshStack, gives you more control over the AuthN part
+and improves UX for endusers when logging in to AWS.
 
-In order to configure the mapping use the `roleMappings` key in the [platform config](#configuration-reference).
+#### AWS SSO
 
+The integration with AWS SSO basically works like this: AuthN is done via the company's IdP. Additionally users will be synced via AWS SSO Automated Provisioning (SCIM) to AWS SSO. meshStack takes care of AuthZ. That means meshStack will create groups for every project role on a meshTenant in AWS SSO. meshStack will assign the according users to these groups. As a last step, meshStack assigns the created groups to the according AWS account with configured PermissionSets.
+
+> An important precondition regarding the automated user provisioning to AWS SSO is, that the userName in AWS SSO will be set to the [euid](meshstack.identity-federation.md#externally-provisioned-identities). This limitation is caused by AWS SSO only allowing to filter on userNames to find users. If an AAD is used as the IdP, that means the userPrincipalName in the AAD must be set to the [euid](meshstack.identity-federation.md#externally-provisioned-identities), as AAD will always set the userName in AWS SSO to its userPrincipalName.
+
+<!--snippet:mesh.platforms.aws.iam-configuration.aws-sso-->
+
+The following configuration options are available at `mesh.platforms.aws.iam-configuration.aws-sso`:
+<!--DOCUSAURUS_CODE_TABS-->
+<!--Dhall Type-->
 ```dhall
-{ roleMappings =
-    [ { mapKey ="admin" {- Name of project role in meshStack -}
-      , mapValue =
-            { roleName = "meshProjectAdminRole" {- Name of IAM role in AWS -}
-            , policyArn = None Text {- Optional: The ARN of an IAM policy to attach to the role. -}
+let AwsSso =
+    {-
+      scim-endpoint:
+        The SCIM endpoint you can find in you AWS SSO Automatic provisioning config.
+      arn:
+        The ARN of your AWS SSO Instance.
+      group-name-pattern:
+          Configures the pattern that defines the desired name of AWS SSO groups managed by meshStack.
+          This Java String.format format string receiving the following arguments:
+
+            1. meshCustomer identifier
+            2. meshProject identifier
+            3. meshProject ID (numeric)
+            4. role name suffix (configurable via Landing Zone)
+
+          Operators must ensure the group names will be unique within the same AWS SSO Instance with that
+          configuration. meshStack will additionaly prefix the group name with "mst-" to be able to identify
+          the groups that are managed by meshStack.
+      sso-access-token:
+        The AWS SSO Access Token that was generated via the Automatic provisioning config in AWS SSO.
+      role-mappings:
+        Defines the mapping of a meshProject role to an AWS SSO PermissionSet. The mapKey is the identifier of
+        meshProject role. The aws-role-name will be used in the group name. The permission-set-arns will be
+        assigned to the created group.
+    -}
+      { scim-endpoint : Text
+      , arn : Text
+      , group-name-pattern : Text
+      , sso-access-token : Text
+      , role-mappings :
+          List
+            { mapKey : Text
+            , mapValue :
+                { aws-role-name : Text, permission-set-arns : List Text }
             }
       }
-    ]
-}
 ```
+<!--Example-->
+```dhall
+let example
+    : AwsSso
+    = { scim-endpoint =
+          "https://scim.eu-central-1.amazonaws.com/xxxxx-xxxx-xxxx-xxxx/scim/v2/"
+      , arn = "arn:aws:sso:::instance/ssoins-123456789"
+      , group-name-pattern = "%s.%s.%4\$s"
+      , sso-access-token = "abc"
+      , role-mappings =
+        [ { mapKey = "admin"
+          , mapValue =
+            { aws-role-name = "meshstack-project-admin"
+            , permission-set-arns =
+              [ "arn:aws:sso:::permissionSet/ssoins-123456789/ps-123456789"
+              ]
+            }
+          }
+        , { mapKey = "user"
+          , mapValue =
+            { aws-role-name = "meshstack-project-developer"
+            , permission-set-arns =
+              [ "arn:aws:sso:::permissionSet/ssoins-123456789/ps-456789123"
+              ]
+            }
+          }
+        , { mapKey = "reader"
+          , mapValue =
+            { aws-role-name = "meshstack-project-reader"
+            , permission-set-arns =
+              [ "arn:aws:sso:::permissionSet/ssoins-123456789/ps-789123456"
+              ]
+            }
+          }
+        ]
+      }
+```
+<!--END_DOCUSAURUS_CODE_TABS-->
 
-If the role does not exist in AWS the replicator tries to create it and attaches a configured IAM Policy to it.
-The replicator also sets up a trust relationship to meshStack's IdP in order to allow SSO for the project users.
+#### meshIdB (deprecated)
 
-If the AWS role does already exist the replicator will update the IdP trust relationship and (if configured) attach the policy via its ARN. Already attached policies to the role won't be changed.
+As AWS SSO is a rather new AWS feature, meshStack integrated IAM for AWS differently in the past. This AWS IAM integration should not be used
+for new integrations anymore. During replication meshStack configures meshIdB as an IdP within the managed account. Additionally according IAM
+roles are created during replication (dependent on configuration either my meshStack or by a CF template or a lambda function that are configured.
+in the Landing Zone). meshStack also sets up a trust relationship to meshIdB in order to allow SSO for the project users.
+meshStack additionaly creates according roles in the meshIdB so the AuthZ information on which accounts can be accessed
+by which user are then part of the SAML token AWS receives after logging in via meshIdB.
 
+<!--snippet:mesh.platforms.aws.iam-configuration.mesh-idb-->
+
+The following configuration options are available at `mesh.platforms.aws.iam-configuration.mesh-idb`:
+<!--DOCUSAURUS_CODE_TABS-->
+<!--Dhall Type-->
+```dhall
+let MeshIdb =
+    {-
+      role-mappings-managed:
+        Defines the mapping of a meshProject role to an AWS IAM Role. As this is a managed mapping, meshStack will
+        take care of creating the AWS IAM Role. The mapKey is the identifier of
+        meshProject role. The aws-role-name will be used in the SAML role that will be created for the mapping.
+        The policies will be assigned to the new IAM Role that will be created by meshStack.
+      role-mappings-external:
+        Defines the mapping of a meshProject role to an AWS IAM Role. As this is an external mapping, meshStack will
+        not take care of creating the AWS IAM Role and assigning some policies to it. meshStack will only assign
+        users to the according SAML Role. The IAM Role must be provisioned in the managed account by e.g.
+        Cloud Formation Templates or a Lambda function defined in the Landing Zone. The mapKey is the identifier of
+        meshProject role. The aws-role-name will be used in the SAML role that will be created for the mapping.
+    -}
+      { role-mappings-managed :
+          List
+            { mapKey : Text
+            , mapValue : { aws-role-name : Text, policies : List Text }
+            }
+      , role-mappings-external :
+          List { mapKey : Text, mapValue : { aws-role-name : Text } }
+      }
+```
+<!--Example-->
+```dhall
+let exampleManaged
+    : MeshIdb
+    = { role-mappings-managed =
+        [ { mapKey = "admin"
+          , mapValue =
+            { aws-role-name = "meshstack-project-admin"
+            , policies = [ "arn:aws:iam::aws:policy/AdministratorAccess" ]
+            }
+          }
+        , { mapKey = "user"
+          , mapValue =
+            { aws-role-name = "meshstack-project-developer"
+            , policies = [ "arn:aws:iam::aws:policy/AmazonS3FullAccess" ]
+            }
+          }
+        , { mapKey = "reader"
+          , mapValue =
+            { aws-role-name = "meshstack-project-reader"
+            , policies = [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+            }
+          }
+        ]
+      , role-mappings-external =
+          [] : List { mapKey : Text, mapValue : { aws-role-name : Text } }
+      }
+
+let exampleExternal
+    : MeshIdb
+    = { role-mappings-external =
+        [ { mapKey = "admin"
+          , mapValue.aws-role-name = "meshstack-project-admin"
+          }
+        , { mapKey = "user"
+          , mapValue.aws-role-name = "meshstack-project-developer"
+          }
+        , { mapKey = "reader"
+          , mapValue.aws-role-name = "meshstack-project-reader"
+          }
+        ]
+      , role-mappings-managed =
+          [] : List
+                 { mapKey : Text
+                 , mapValue :
+                     { aws-role-name : Text, policies : List Text }
+                 }
+      }
+```
+<!--END_DOCUSAURUS_CODE_TABS-->
 
 ### Project-Account Email Addresses
 
