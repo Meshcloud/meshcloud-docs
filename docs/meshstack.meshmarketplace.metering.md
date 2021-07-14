@@ -140,7 +140,6 @@ The line items for the seller will appear in the usage reports and chargeback st
 
 This feature can be used for services for which usage should be tracked but the chargeback process is not yet completely established.
 
-<!--snippet:mesh.kraken.meshMarketplace-->
 
 The following configuration options are available at `mesh.kraken.meshMarketplace`:
 <!--DOCUSAURUS_CODE_TABS-->
@@ -163,7 +162,6 @@ let example
     : MeshMarketplace
     = { outOfScopeMarketplaceSellers = [ "demo-seller" ] }
 ```
-<!--END_DOCUSAURUS_CODE_TABS-->
 
 ## Reviewing Metering Data
 

@@ -108,7 +108,7 @@ let AwsPlatformKrakenConfiguration =
           Optional Text
       , data-source :
           {-
-          Currently both AWS Cost and Usage Reports and AWS Cost Explorer are supported.
+          Currently both AWS Cost and Uasge Reports and AWS Cost Explorer are supported.
           But AWS Cost and Usage Reports are planned to be deprecated
           -}
           ./DataSource.dhall
@@ -136,6 +136,9 @@ let example
                   (./CostExplorer.dhall).FilterType.NONE
               , reservedInstanceFairChargeback =
                   {-Enable fair chargeback for meshCustomer purchased RIs-}
+                  True
+              , savingsPlanFairChargeback =
+                  {-Enable fair chargeback for meshCustomer purchased SPs-}
                   True
               }
             }
