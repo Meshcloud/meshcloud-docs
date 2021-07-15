@@ -66,7 +66,8 @@
     "Amazon Web Services": [
       "meshstack.aws.index",
       "meshstack.aws.landing-zones",
-      "meshstack.aws.metering"
+      "meshstack.aws.metering",
+      "meshstack.aws.sso-setup"
     ],
     "Microsoft Azure": [
       "meshstack.azure.index",
