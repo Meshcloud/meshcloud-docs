@@ -307,6 +307,38 @@ customer_identifier_length: 16
 project_identifier_length: 30
 ```
 
+### AWS Control Tower Integration
+
+A `PlatformInstance` can be configured to integrate with an existing AWS Control Tower setup.
+In order to manage accounts created by meshStack with AWS Control Tower, these need to be "enrolled".
+AWS Control Tower utilizes an Account Factory, to provide new accounts or enroll other accounts with it.
+AWS Control Tower will create an Account Factory Product in AWS Service Catalog, that will be invoked to enroll accounts.
+meshStack can be enabled to trigger the Account Factory via AWS Service Catalog.
+The correct Id of the Account Factory Product needs to be specified in the enrollment configuration besides the management account Id.
+meshStack will create new accounts as usual and in a later step will enroll them via the Account Factory with AWS Control Tower.
+
+The enrollment configuration looks like this:
+
+```dhall
+{ management-account-id : Text
+, account-factory-product-id : Text
+}
+```
+
+The following prerequisites must be fulfilled for the enrollment to work:
+
+* Configured AWS Control Tower
+* AWS Service Catalog needs to have an AWS Control Tower Account Factory Portfolio
+* The portfolio needs to contain an AWS Control Tower Account Factory Product
+* The AWS Control Tower Account Factory Product needs to have at least one active Provisioned Artifact (active version)
+* There needs to be a launch path with permissions to invoke the AWS Account Factory Product for meshStack access
+* All [AWS prerequisites](https://docs.aws.amazon.com/controltower/latest/userguide/enroll-account.html) for enrolling accounts
+
+> In order to enroll created accounts with AWS Control Tower, **a Landing Zone must be configured**. The `Target Organization Unit Id` from the Landing Zone
+> configuration must belong to a OU that is already enrolled with AWS Control Tower.
+> Refer to [Landing Zone Configuration](./meshstack.aws.landing-zones.md#target-organization-unit-id) for more information.
+
+
 ## Configuration Reference
 
 Please find the full `Aws.dhall` [configuration options](./meshstack.configuration.md) below:
@@ -351,6 +383,7 @@ Please find the full `Aws.dhall` [configuration options](./meshstack.configurati
     false any existing account alias will be kept as it is and only be set if there is none at all.
   -}
   , enforceAccountAlias : Bool
+  , enrollment-configuration : Optional EnrollmentConfiguration
   }
 ```
 
@@ -687,4 +720,4 @@ def main(event, context):
 
 This Lambda will be invoked during account provisioning and downgrades the `MeshstackAccountAccessRole`.
 
-> Depending of your mode of operation (usage of external Account Vending Machine) these "minimal rights" can be adapted and further restricted. Please [contact us](https://support.meshcloud.io) for more details on reducing these rights.
+> Depending of your mode of operation (usage of external Account Vending Machine or configuration of AWS Control Tower enrollment) these "minimal rights" can be adapted and further restricted. Please [contact us](mailto:support@meshcloud.io) for more details on reducing these rights.
